@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#101114">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FitBuddy</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui;background:#101114;color:#f5f5f5}
+header{padding:24px 18px;background:#17191e;position:sticky;top:0;z-index:2}
+h1{margin:0;font-size:28px}p{color:#aaa}.wrap{max-width:760px;margin:auto;padding:16px}
+nav{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}
+button{border:0;border-radius:12px;padding:12px;background:#252932;color:white;font-weight:700}
+button.active{background:#fff;color:#111}.card{background:#191b20;border-radius:18px;padding:18px;margin:12px 0}
+input,select{width:100%;padding:13px;border-radius:12px;border:1px solid #333;background:#101114;color:white;margin:6px 0 12px}
+.big{font-size:32px;font-weight:800}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.item{padding:13px;background:#23262d;border-radius:13px;margin:8px 0}.muted{color:#999}
+.hidden{display:none}.danger{color:#ff9a9a}.ok{color:#9dffb0}
+</style>
+</head>
+<body>
+<header><div class="wrap"><h1>FitBuddy</h1><p>Workouts • food tracking • fitness Q&A</p></div></header>
+<div class="wrap">
+<nav>
+<button onclick="show('home')" id="bhome">Home</button>
+<button onclick="show('workout')" id="bworkout">Workout</button>
+<button onclick="show('food')" id="bfood">Food</button>
+<button onclick="show('ai')" id="bai">Ask AI</button>
+</nav>
+
+<section id="home">
+<div class="card"><div class="muted">Today</div><div class="big" id="total">0 kcal</div><p id="macroline">0g protein • 0g carbs • 0g fat</p></div>
+<div class="card"><h2>Quick start</h2><button onclick="show('workout')">Get today's workout</button> <button onclick="show('food')">Add food</button></div>
+</section>
+
+<section id="workout" class="hidden">
+<div class="card"><h2>Today's workout</h2><select id="level"><option>Beginner</option><option>Intermediate</option></select>
+<select id="focus"><option>Full body</option><option>Upper body</option><option>Lower body</option><option>Core</option></select>
+<button onclick="makeWorkout()">Generate</button><div id="workoutList"></div></div>
+</section>
+
+<section id="food" class="hidden">
+<div class="card"><h2>Add food</h2><p>Search a barcode using the free Open Food Facts database.</p>
+<input id="barcode" placeholder="Barcode e.g. 737628064502">
+<button onclick="scan()">Scan barcode</button>
+<div id="scanResult"></div>
+<hr style="border-color:#292c33">
+<input id="foodname" placeholder="Food name">
+<div class="grid"><input id="cal" type="number" placeholder="Calories"><input id="protein" type="number" placeholder="Protein g">
+<input id="carbs" type="number" placeholder="Carbs g"><input id="fat" type="number" placeholder="Fat g"></div>
+<button onclick="addFood()">Add to today</button>
+</div>
+<div class="card"><h2>Today</h2><div id="foods"></div></div>
+</section>
+
+<section id="ai" class="hidden">
+<div class="card"><h2>Fitness Q&A</h2><p>This free version uses an offline answer engine so there is no API bill.</p>
+<input id="q" placeholder="Ask about workouts, food, recovery...">
+<button onclick="ask()">Ask</button><div id="answer"></div></div>
+</section>
+</div>
+
+<script>
+const foods=JSON.parse(localStorage.getItem('foods')||'[]');
+const ex={
+'Full body':['Bodyweight squats','Incline push-ups','Glute bridges','Bird dogs','Wall sit'],
+'Upper body':['Incline push-ups','Backpack rows','Wall push-ups','Plank shoulder taps','Dead bugs'],
+'Lower body':['Bodyweight squats','Reverse lunges','Glute bridges','Calf raises','Wall sit'],
+'Core':['Dead bugs','Bird dogs','Front plank','Side plank','Slow mountain climbers']
+};
+function show(id){['home','workout','food','ai'].forEach(x=>document.getElementById(x).classList.toggle('hidden',x!==id));document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));document.getElementById('b'+id).classList.add('active');if(id==='food')renderFoods();update()}
+function makeWorkout(){let a=ex[focus.value], sets=level.value==='Beginner'?2:3;workoutList.innerHTML=a.map((x,i)=>`<div class="item"><b>${x}</b><br><span class="muted">${sets} sets • ${i%2? '8–12 reps':'30–45 sec'}</span></div>`).join('')}
+async function scan(){
+ let code=barcode.value.trim(); if(!code)return;
+ scanResult.textContent='Looking it up...';
+ try{let r=await fetch('https://world.openfoodfacts.org/api/v2/product/'+encodeURIComponent(code)+'.json');let d=await r.json();
+ if(d.status!==1)throw Error();
+ let p=d.product,n=p.product_name||'Unknown food',nut=p.nutriments||{};
+ foodname.value=n;cal.value=Math.round(nut['energy-kcal_100g']||0);protein.value=Math.round(nut.proteins_100g||0);carbs.value=Math.round(nut.carbohydrates_100g||0);fat.value=Math.round(nut.fat_100g||0);
+ scanResult.innerHTML='<p class="ok">Found '+n+'</p>'}catch(e){scanResult.innerHTML='<p class="danger">Could not find that barcode. You can enter the nutrition manually.</p>'}
+}
+function addFood(){let f={name:foodname.value||'Food',cal:+cal.value||0,protein:+protein.value||0,carbs:+carbs.value||0,fat:+fat.value||0};foods.push(f);localStorage.setItem('foods',JSON.stringify(foods));foodname.value=cal.value=protein.value=carbs.value=fat.value='';renderFoods();update()}
+function renderFoods(){foodsEl.innerHTML=foods.length?foods.map((f,i)=>`<div class="item"><b>${f.name}</b><br>${f.cal} kcal • ${f.protein}g P • ${f.carbs}g C • ${f.fat}g F <button onclick="del(${i})">x</button></div>`).join(''):'<p class="muted">Nothing added yet</p>'}
+function del(i){foods.splice(i,1);localStorage.setItem('foods',JSON.stringify(foods));renderFoods();update()}
+function update(){let s=foods.reduce((a,f)=>({cal:a.cal+f.cal,p:a.p+f.protein,c:a.c+f.carbs,f:a.f+f.fat}),{cal:0,p:0,c:0,f:0});total.textContent=Math.round(s.cal)+' kcal';macroline.textContent=Math.round(s.p)+'g protein • '+Math.round(s.c)+'g carbs • '+Math.round(s.f)+'g fat'}
+function ask(){let q=document.getElementById('q').value.toLowerCase();let a=q.includes('protein')?'Protein helps your body repair and build tissue. Get it from normal foods like eggs, dairy, beans, fish, meat, tofu, or nuts.':q.includes('workout')||q.includes('exercise')?'Start with controlled reps and good form. A simple full body routine 2 to 3 times a week can work well. Rest if something hurts.':q.includes('sleep')?'Sleep matters a lot for recovery. Teens generally need around 8 to 10 hours each night.':q.includes('calorie')||q.includes('macro')?'Macros are protein, carbs, and fat. Your needs vary with growth and activity, so avoid aggressive calorie restriction and focus on balanced meals.':'I can help with basic fitness, food, recovery, exercise form, and healthy habits. Try asking one of those.';answer.innerHTML='<div class="item">'+a+'</div>'}
+const foodsEl=document.getElementById('foods');show('home');makeWorkout();
+</script>
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>
